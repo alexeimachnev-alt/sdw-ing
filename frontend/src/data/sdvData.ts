@@ -2,7 +2,11 @@ export type TabId = 'home' | 'services' | 'portfolio' | 'partners' | 'about';
 
 export type LeadMode =
   | 'estimate_48h'
+  | 'order_project'
+  | 'order_mount'
+  | 'order_service'
   | 'audit'
+  | 'consultation'
   | 'office_viewing'
   | 'partner_b2b'
   | 'question';
@@ -13,6 +17,108 @@ export interface LeadModalContext {
   projectTitle?: string;
   customCta?: string;
 }
+
+export type OrderCategoryId = 'order_project' | 'order_mount' | 'order_service' | 'audit';
+
+export interface OrderCategory {
+  id: OrderCategoryId;
+  tabLabel: string;
+  title: string;
+  subtitle: string;
+  ctaLabel: string;
+  items: string[];
+  stageLabel: string;
+  stageOptions: string[];
+  showArea: boolean;
+}
+
+export const ORDER_CATALOG: OrderCategory[] = [
+  {
+    id: 'order_project',
+    tabLabel: 'Проект',
+    title: 'Заказать проект',
+    subtitle: 'Точные расчёты, BIM-увязка в миллиметрах и рабочая документация DWG/PDF',
+    ctaLabel: 'Заказать проектирование',
+    items: [
+      'Отопление',
+      'Котельная',
+      'Вода и канализация',
+      'Электроснабжение',
+      'Вентиляция',
+      'Умный дом',
+      'Тёплый пол',
+      'Дренаж (участка / фундамента)',
+    ],
+    stageLabel: 'Стадия проекта',
+    stageOptions: ['Есть архитектура / план', 'Только планируем стройку', 'Нужен BIM-комплекс'],
+    showArea: true,
+  },
+  {
+    id: 'order_mount',
+    tabLabel: 'Монтаж',
+    title: 'Заказать монтаж',
+    subtitle: 'Чистый монтаж под ключ, маркировка узлов, фото скрытых работ и ПНР',
+    ctaLabel: 'Заказать монтаж',
+    items: [
+      'Отопление',
+      'Котельная',
+      'Вода и канализация',
+      'Электроснабжение',
+      'Вентиляция',
+      'Умный дом',
+      'Тёплый пол',
+      'Дренаж (участка / фундамента)',
+    ],
+    stageLabel: 'Готовность к монтажу',
+    stageOptions: ['Есть готовый проект', 'Нужен проект + монтаж', 'Коробка дома готова'],
+    showArea: true,
+  },
+  {
+    id: 'order_service',
+    tabLabel: 'Обслуживание',
+    title: 'Обслуживание (ТО)',
+    subtitle: 'Регламентное обслуживание, настройка автоматики и сервис 24/7',
+    ctaLabel: 'Заказать обслуживание',
+    items: [
+      'Отопление',
+      'Электроснабжение',
+      'Вентиляция',
+      'Умный дом',
+      'Тёплый пол',
+      'Септик',
+      'Дренаж (участка / фундамента)',
+    ],
+    stageLabel: 'Формат обслуживания',
+    stageOptions: ['Разовое ТО', 'Годовой договор', 'Срочный выезд / сбой'],
+    showArea: false,
+  },
+  {
+    id: 'audit',
+    tabLabel: 'Аудит',
+    title: 'Инженерный аудит',
+    subtitle: 'Диагностика систем, проверка подрядчиков и план исправления ошибок',
+    ctaLabel: 'Заказать аудит',
+    items: [
+      'Отопление',
+      'Электроснабжение',
+      'Вентиляция',
+      'Умный дом',
+      'Тёплый пол',
+      'Септик — канализация',
+      'Дренаж (участка / фундамента)',
+    ],
+    stageLabel: 'Причина аудита',
+    stageOptions: ['Проверка подрядчика', 'Ошибки / переделка', 'Перед покупкой дома'],
+    showArea: true,
+  },
+];
+
+export const CONSULTATION_TOPICS = [
+  'Подбор систем под дом',
+  'Ориентир по бюджету',
+  'Технический вопрос',
+  'Выезд инженера на объект',
+];
 
 export interface ServiceItem {
   id: string;
