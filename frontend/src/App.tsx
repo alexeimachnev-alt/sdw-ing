@@ -30,6 +30,8 @@ import {
   PARTNER_PILLARS,
   ABOUT_STATS,
   PRINCIPLES_5,
+  ORDER_CATALOG,
+  OrderCategoryId,
   TabId,
   ServiceItem,
   LeadModalContext,
@@ -61,6 +63,7 @@ export default function App() {
   const [leadContext, setLeadContext] = useState<LeadModalContext | null>(null);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [portfolioFilter, setPortfolioFilter] = useState<string>('Все');
+  const [orderCategory, setOrderCategory] = useState<OrderCategoryId>('order_project');
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -188,13 +191,22 @@ export default function App() {
                     >
                       Получить план и смету за 48 часов
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => openLead({ mode: 'audit' })}
-                      className="w-full py-3 px-4 rounded-2xl bg-white/[0.05] border border-white/10 text-[#F5F5F7] font-semibold text-xs active:scale-[0.98] transition-transform"
-                    >
-                      Запросить аудит объекта
-                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openLead({ mode: 'consultation' })}
+                        className="w-full py-3 px-3 rounded-2xl bg-white/[0.05] border border-white/10 text-[#F5F5F7] font-semibold text-xs active:scale-[0.98] transition-transform"
+                      >
+                        Консультация
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openLead({ mode: 'audit' })}
+                        className="w-full py-3 px-3 rounded-2xl bg-white/[0.05] border border-white/10 text-[#F5F5F7] font-semibold text-xs active:scale-[0.98] transition-transform"
+                      >
+                        Аудит объекта
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -350,15 +362,92 @@ export default function App() {
             >
               <div className="space-y-1.5">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-[#C8A97E] font-semibold">
-                  7 направлений под ключ
+                  Быстрый заказ услуги
                 </p>
                 <h1 className="text-2xl font-extrabold tracking-tight text-[#F5F5F7]">
-                  Полный цикл инженерных решений
+                  Проект, монтаж, ТО и аудит
                 </h1>
                 <p className="text-xs text-[#8E95A2] leading-relaxed">
-                  Каждая система в доме спроектирована и реализована одной командой: точные расчёты,
-                  чистый монтаж, тишина и контроль.
+                  Выберите нужный формат работ и инженерную систему — откроется форма с подбором параметров.
                 </p>
+              </div>
+
+              {/* Interactive 4-Category Order Matrix */}
+              {(() => {
+                const currentCat =
+                  ORDER_CATALOG.find((c) => c.id === orderCategory) ?? ORDER_CATALOG[0];
+                return (
+                  <section className="glass-card rounded-3xl p-4 space-y-3.5 border-[#C8A97E]/25">
+                    <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-[#0B0D10]/80 border border-white/[0.06]">
+                      {ORDER_CATALOG.map((cat) => {
+                        const active = cat.id === orderCategory;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              hapticSelection();
+                              setOrderCategory(cat.id);
+                            }}
+                            className={`py-2 px-1 rounded-xl text-[11px] font-bold transition-all ${
+                              active
+                                ? 'bg-[#C8A97E] text-[#0B0D10] shadow-sm'
+                                : 'text-[#8E95A2] hover:text-[#F5F5F7]'
+                            }`}
+                          >
+                            {cat.tabLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-1">
+                      <h2 className="text-sm font-extrabold text-[#F5F5F7]">{currentCat.title}</h2>
+                      <p className="text-[11px] text-[#8E95A2] leading-snug">
+                        {currentCat.subtitle}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {currentCat.items.map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() =>
+                            openLead({
+                              mode: currentCat.id,
+                              serviceTitle: item,
+                              customCta: `${currentCat.title}: ${item}`,
+                            })
+                          }
+                          className="text-left rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] px-3 py-2.5 flex items-center justify-between gap-2 active:scale-[0.98] transition-all"
+                        >
+                          <span className="text-xs font-semibold text-[#F5F5F7] leading-tight">
+                            {item}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-[#C8A97E] shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openLead({ mode: 'consultation' })}
+                      className="w-full py-3 rounded-2xl bg-[#C8A97E]/12 border border-[#C8A97E]/35 text-xs font-bold text-[#C8A97E] active:scale-[0.98] transition-transform"
+                    >
+                      Получить консультацию инженера
+                    </button>
+                  </section>
+                );
+              })()}
+
+              <div className="pt-2 space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[#8E95A2] font-semibold">
+                  Подробно о направлениях
+                </p>
+                <h2 className="text-lg font-extrabold text-[#F5F5F7]">
+                  7 инженерных разделов под ключ
+                </h2>
               </div>
 
               <div className="space-y-3">
