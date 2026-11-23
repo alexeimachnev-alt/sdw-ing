@@ -33,7 +33,11 @@ router = Router()
 
 MODE_LABELS = {
     "estimate_48h": "📐 План и смета за 48 часов",
-    "audit": "🔍 Аудит текущих этапов работ",
+    "order_project": "📐 Заказ проекта",
+    "order_mount": "🛠 Заказ монтажа",
+    "order_service": "⚙️ Обслуживание (ТО)",
+    "audit": "🔍 Инженерный аудит",
+    "consultation": "📞 Запрос консультации",
     "office_viewing": "🔒 Закрытый просмотр в офисе (NDA)",
     "partner_b2b": "🤝 Партнёрство (Архитекторы / Дизайнеры)",
     "question": "💬 Вопрос инженеру-куратору",
@@ -50,6 +54,7 @@ def format_admin_lead(data: dict[str, Any], tg_user: Any = None) -> str:
     project_title = data.get("projectTitle")
     service_title = data.get("serviceTitle")
     area = data.get("area")
+    stage = data.get("stage")
     systems = data.get("systems") or []
     comment = data.get("comment")
 
@@ -70,6 +75,8 @@ def format_admin_lead(data: dict[str, Any], tg_user: Any = None) -> str:
         lines.append(f"⚙️ <b>Раздел:</b> {html.escape(str(service_title))}")
     if area:
         lines.append(f"📏 <b>Площадь:</b> {html.escape(str(area))}")
+    if stage:
+        lines.append(f"📌 <b>Стадия / Формат:</b> {html.escape(str(stage))}")
     if systems:
         sys_str = ", ".join(html.escape(str(s)) for s in systems)
         lines.append(f"🛠 <b>Системы:</b> {sys_str}")
