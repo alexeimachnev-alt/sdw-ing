@@ -209,9 +209,7 @@ def create_http_app(bot: Bot) -> web.Application:
         return web.json_response({"ok": True})
 
     app.router.add_get("/", health)
-    app.router.add_head("/", health)
     app.router.add_get("/health", health)
-    app.router.add_head("/health", health)
     app.router.add_post("/api/lead", receive_lead)
     return app
 
