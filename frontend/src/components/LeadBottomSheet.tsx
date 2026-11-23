@@ -8,8 +8,16 @@ import {
   Handshake,
   MessageSquare,
   CheckCircle2,
+  Compass,
+  Wrench,
+  ShieldCheck,
+  PhoneCall,
 } from 'lucide-react';
-import { LeadModalContext } from '../data/sdvData';
+import {
+  LeadModalContext,
+  ORDER_CATALOG,
+  CONSULTATION_TOPICS,
+} from '../data/sdvData';
 
 interface LeadBottomSheetProps {
   context: LeadModalContext | null;
@@ -20,15 +28,16 @@ interface LeadBottomSheetProps {
   onTap: () => void;
 }
 
-const AREA_CHIPS = ['<300 м²', '300–700 м²', '700–1500 м²', '1500+ м²'];
-const SYSTEM_CHIPS = [
-  'Проектирование (BIM)',
-  'Отопление и котельная',
-  'Водоснабжение и ВК',
-  'Вентиляция и климат',
-  'Электрика и АВР',
-  'Умный дом (KNX)',
-  'Строительство',
+const AREA_CHIPS = ['<200 м²', '200–500 м²', '500–1000 м²', '1000+ м²'];
+const DEFAULT_SYSTEM_CHIPS = [
+  'Отопление',
+  'Котельная',
+  'Вода и канализация',
+  'Электроснабжение',
+  'Вентиляция',
+  'Умный дом',
+  'Тёплый пол',
+  'Дренаж (участка / фундамента)',
 ];
 
 function formatRuPhone(raw: string): string {
@@ -60,6 +69,7 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
   const [phone, setPhone] = useState('');
   const [comment, setComment] = useState('');
   const [area, setArea] = useState<string>('');
+  const [stage, setStage] = useState<string>('');
   const [selectedSystems, setSelectedSystems] = useState<string[]>([]);
   const [agreed, setAgreed] = useState(true);
   const [submitted, setSubmitted] = useState(false);
@@ -70,19 +80,48 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
       setSubmitted(false);
       setComment('');
       setArea('');
+      setStage('');
       setSelectedSystems(context.serviceTitle ? [context.serviceTitle] : []);
     }
   }, [context, initialName]);
 
+  const catalogMatch = ORDER_CATALOG.find((c) => c.id === context?.mode);
+
   const meta = (() => {
+    if (catalogMatch) {
+      const iconMap = {
+        order_project: Compass,
+        order_mount: Wrench,
+        order_service: ShieldCheck,
+        audit: ClipboardCheck,
+      };
+      return {
+        title: catalogMatch.title,
+        subtitle: catalogMatch.subtitle,
+        badge: context?.serviceTitle
+          ? `${catalogMatch.tabLabel} • ${context.serviceTitle}`
+          : catalogMatch.title,
+        icon: iconMap[catalogMatch.id],
+        cta: context?.customCta || catalogMatch.ctaLabel,
+        showArea: catalogMatch.showArea,
+        systemsList: catalogMatch.items,
+        stageLabel: catalogMatch.stageLabel,
+        stageOptions: catalogMatch.stageOptions,
+      };
+    }
+
     switch (context?.mode) {
-      case 'audit':
+      case 'consultation':
         return {
-          title: 'Аудит текущих этапов работ',
-          subtitle: 'Проведём диагностику систем, проверим узлы и подготовим план корректировок.',
-          badge: 'Инженерный аудит',
-          icon: ClipboardCheck,
-          cta: 'Запросить аудит',
+          title: 'Получить консультацию',
+          subtitle: 'Инженер-куратор ответит на вопросы, подскажет по системам и бюджету в течение часа.',
+          badge: 'Консультация инженера',
+          icon: PhoneCall,
+          cta: 'Получить консультацию',
+          showArea: true,
+          systemsList: DEFAULT_SYSTEM_CHIPS,
+          stageLabel: 'Тема консультации',
+          stageOptions: CONSULTATION_TOPICS,
         };
       case 'office_viewing':
         return {
@@ -92,6 +131,10 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
           badge: context.projectTitle || 'Объект под NDA',
           icon: Lock,
           cta: 'Записаться на просмотр',
+          showArea: false,
+          systemsList: [] as string[],
+          stageLabel: '',
+          stageOptions: [] as string[],
         };
       case 'partner_b2b':
         return {
@@ -101,6 +144,10 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
           badge: 'Архитекторам и дизайнерам',
           icon: Handshake,
           cta: 'Предложить проект',
+          showArea: true,
+          systemsList: [] as string[],
+          stageLabel: 'Формат сотрудничества',
+          stageOptions: ['Нужен шаблон ТЗ', 'Есть объект в работе', 'Авторский надзор'],
         };
       case 'question':
         return {
@@ -109,6 +156,10 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
           badge: 'Консультация',
           icon: MessageSquare,
           cta: 'Отправить вопрос',
+          showArea: false,
+          systemsList: [] as string[],
+          stageLabel: 'Тема вопроса',
+          stageOptions: CONSULTATION_TOPICS,
         };
       default:
         return {
@@ -117,6 +168,10 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
           badge: context?.serviceTitle || 'Расчёт под ключ',
           icon: FileSpreadsheet,
           cta: context?.customCta || 'Получить план и смету',
+          showArea: true,
+          systemsList: DEFAULT_SYSTEM_CHIPS,
+          stageLabel: 'Стадия объекта',
+          stageOptions: ['Есть проект / план', 'Идёт стройка', 'Только планируем'],
         };
     }
   })();
@@ -144,6 +199,7 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
       name: name.trim(),
       phone,
       area: area || null,
+      stage: stage || null,
       systems: selectedSystems,
       comment: comment.trim() || null,
     });
@@ -167,7 +223,7 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-            className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-[30px] bg-[#12151A] border-t border-white/10 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
+            className="relative z-10 w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[30px] bg-[#12151A] border-t border-white/10 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
           >
             <div className="mx-auto w-10 h-1 rounded-full bg-white/20 mb-4" />
 
@@ -222,60 +278,95 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
 
                 <p className="text-xs leading-relaxed text-[#8E95A2]">{meta.subtitle}</p>
 
-                {context.mode === 'estimate_48h' && (
+                {/* Contextual Smart Selectors */}
+                {(meta.showArea || meta.systemsList.length > 0 || meta.stageOptions.length > 0) && (
                   <div className="space-y-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#8E95A2] mb-2">
-                        Ориентировочная площадь дома
-                      </label>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {AREA_CHIPS.map((chip) => {
-                          const active = area === chip;
-                          return (
-                            <button
-                              key={chip}
-                              type="button"
-                              onClick={() => {
-                                onTap();
-                                setArea(active ? '' : chip);
-                              }}
-                              className={`tabular-nums py-2 px-1 rounded-xl text-[11px] font-bold border transition-all ${
-                                active
-                                  ? 'bg-[#C8A97E]/20 border-[#C8A97E] text-[#F5F5F7]'
-                                  : 'bg-white/[0.03] border-white/[0.08] text-[#8E95A2]'
-                              }`}
-                            >
-                              {chip}
-                            </button>
-                          );
-                        })}
+                    {meta.systemsList.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-[#8E95A2] mb-2">
+                          Выберите разделы / системы (можно несколько)
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {meta.systemsList.map((sys) => {
+                            const active = selectedSystems.includes(sys);
+                            return (
+                              <button
+                                key={sys}
+                                type="button"
+                                onClick={() => toggleSystem(sys)}
+                                className={`py-1.5 px-2.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                                  active
+                                    ? 'bg-[#C8A97E]/20 border-[#C8A97E] text-[#F5F5F7]'
+                                    : 'bg-white/[0.03] border-white/[0.08] text-[#8E95A2]'
+                                }`}
+                              >
+                                {sys}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[#8E95A2] mb-2">
-                        Интересующие системы
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {SYSTEM_CHIPS.map((sys) => {
-                          const active = selectedSystems.includes(sys);
-                          return (
-                            <button
-                              key={sys}
-                              type="button"
-                              onClick={() => toggleSystem(sys)}
-                              className={`py-1.5 px-2.5 rounded-xl text-[11px] font-semibold border transition-all ${
-                                active
-                                  ? 'bg-[#C8A97E]/20 border-[#C8A97E] text-[#F5F5F7]'
-                                  : 'bg-white/[0.03] border-white/[0.08] text-[#8E95A2]'
-                              }`}
-                            >
-                              {sys}
-                            </button>
-                          );
-                        })}
+                    {meta.showArea && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-[#8E95A2] mb-2">
+                          Ориентировочная площадь дома
+                        </label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {AREA_CHIPS.map((chip) => {
+                            const active = area === chip;
+                            return (
+                              <button
+                                key={chip}
+                                type="button"
+                                onClick={() => {
+                                  onTap();
+                                  setArea(active ? '' : chip);
+                                }}
+                                className={`tabular-nums py-2 px-1 rounded-xl text-[11px] font-bold border transition-all ${
+                                  active
+                                    ? 'bg-[#C8A97E]/20 border-[#C8A97E] text-[#F5F5F7]'
+                                    : 'bg-white/[0.03] border-white/[0.08] text-[#8E95A2]'
+                                }`}
+                              >
+                                {chip}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {meta.stageOptions.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-[#8E95A2] mb-2">
+                          {meta.stageLabel}
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {meta.stageOptions.map((opt) => {
+                            const active = stage === opt;
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => {
+                                  onTap();
+                                  setStage(active ? '' : opt);
+                                }}
+                                className={`py-1.5 px-3 rounded-xl text-[11px] font-semibold border transition-all ${
+                                  active
+                                    ? 'bg-[#C8A97E]/20 border-[#C8A97E] text-[#F5F5F7]'
+                                    : 'bg-white/[0.03] border-white/[0.08] text-[#8E95A2]'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -317,7 +408,7 @@ export const LeadBottomSheet: React.FC<LeadBottomSheetProps> = ({
                       rows={2}
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="Стадия стройки, локация или ваш вопрос..."
+                      placeholder="Локация, особенности объекта или ваш вопрос..."
                       className="w-full rounded-2xl bg-[#0B0D10] border border-white/10 px-4 py-2.5 text-sm text-[#F5F5F7] placeholder:text-[#8E95A2]/50 focus:outline-none focus:border-[#C8A97E] resize-none"
                     />
                   </div>
