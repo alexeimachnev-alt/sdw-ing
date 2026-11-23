@@ -5,10 +5,11 @@ import logging
 import os
 from typing import Any
 
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, web
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramConflictError, TelegramNetworkError
 from aiogram.filters import CommandStart
 from aiogram.types import (
     KeyboardButton,
@@ -25,8 +26,13 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
 WEBAPP_URL = os.environ["WEBAPP_URL"].rstrip("/")
 PORT = int(os.getenv("PORT", "8080"))
+# Render автоматически подставляет свой внешний URL в эту переменную
+SELF_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger("sdv_bot")
 
 router = Router()
@@ -138,7 +144,7 @@ async def cors_middleware(request: web.Request, handler):
     else:
         resp = await handler(request)
     resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+    resp.headers["Access-Control-Allow-Methods"] = "POST, GET, HEAD, OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return resp
 
@@ -147,7 +153,7 @@ def create_http_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
 
     async def health(_: web.Request) -> web.Response:
-        return web.json_response({"status": "ok"})
+        return web.json_response({"status": "ok", "service": "sdv-bot"})
 
     async def receive_lead(request: web.Request) -> web.Response:
         try:
@@ -173,19 +179,65 @@ def create_http_app(bot: Bot) -> web.Application:
 
         return web.json_response({"ok": True})
 
+    # Поддержка GET и HEAD на / и /health для Render и UptimeRobot
+    app.router.add_get("/", health)
+    app.router.add_head("/", health)
     app.router.add_get("/health", health)
+    app.router.add_head("/health", health)
     app.router.add_post("/api/lead", receive_lead)
     return app
 
 
+async def keep_alive_loop() -> None:
+    """Авто-пинг каждые 10 минут, чтобы бесплатный Render не усыплял контейнер."""
+    if not SELF_URL:
+        logger.info("RENDER_EXTERNAL_URL not set; self-ping disabled.")
+        return
+
+    ping_url = f"{SELF_URL}/health"
+    timeout = ClientTimeout(total=10)
+    logger.info("Keep-alive loop started -> %s", ping_url)
+
+    while True:
+        await asyncio.sleep(600)  # 10 минут
+        try:
+            async with ClientSession(timeout=timeout) as session:
+                async with session.get(ping_url) as resp:
+                    logger.info("Keep-alive ping %s -> %s", ping_url, resp.status)
+        except Exception as exc:
+            logger.warning("Keep-alive ping failed: %s", exc)
+
+
 async def on_startup(bot: Bot) -> None:
-    await bot.set_chat_menu_button(
-        menu_button=MenuButtonWebApp(
-            text="СДВ Инжиниринг",
-            web_app=WebAppInfo(url=WEBAPP_URL),
+    try:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="СДВ Инжиниринг",
+                web_app=WebAppInfo(url=WEBAPP_URL),
+            )
         )
-    )
-    logger.info("Menu Button configured -> %s", WEBAPP_URL)
+        logger.info("Menu Button configured -> %s", WEBAPP_URL)
+    except Exception as exc:
+        logger.warning("Could not set menu button: %s", exc)
+
+
+async def run_polling_forever(dp: Dispatcher, bot: Bot) -> None:
+    """Защита от падений при редеплое (TelegramConflictError) и обрывах сети."""
+    while True:
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dp.start_polling(bot, handle_signals=False)
+        except TelegramConflictError:
+            logger.warning("Conflict with old instance during deploy. Retrying in 5s...")
+            await asyncio.sleep(5)
+        except TelegramNetworkError as exc:
+            logger.warning("Telegram network error: %s. Retrying in 5s...", exc)
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.exception("Unexpected polling error: %s. Retrying in 5s...", exc)
+            await asyncio.sleep(5)
 
 
 async def main() -> None:
@@ -197,16 +249,22 @@ async def main() -> None:
     dp.include_router(router)
     dp.startup.register(on_startup)
 
+    # 1. Запускаем HTTP-сервер первым (чтобы Render сразу увидел открытый порт)
     http_app = create_http_app(bot)
     runner = web.AppRunner(http_app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
     await site.start()
-    logger.info("HTTP lead endpoint listening on port %s", PORT)
+    logger.info("HTTP server listening on port %s", PORT)
 
+    # 2. Запускаем фоновый авто-пинг
+    keep_alive_task = asyncio.create_task(keep_alive_loop())
+
+    # 3. Запускаем устойчивый polling
     try:
-        await dp.start_polling(bot)
+        await run_polling_forever(dp, bot)
     finally:
+        keep_alive_task.cancel()
         await runner.cleanup()
         await bot.session.close()
 
