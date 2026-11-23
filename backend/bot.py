@@ -23,10 +23,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
 WEBAPP_URL = os.environ["WEBAPP_URL"].rstrip("/")
 PORT = int(os.getenv("PORT", "8080"))
-# Render автоматически подставляет свой внешний URL в эту переменную
 SELF_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
 
 logging.basicConfig(
@@ -34,6 +32,28 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("sdv_bot")
+
+
+def load_recipient_ids() -> list[int]:
+    """Собирает ID главного админа и до 3 менеджеров без дублей."""
+    raw_values = [
+        os.getenv("ADMIN_CHAT_ID", ""),
+        os.getenv("MANAGER_1_ID", "447208738"),
+        os.getenv("MANAGER_2_ID", ""),
+        os.getenv("MANAGER_3_ID", ""),
+    ]
+    ids: list[int] = []
+    for raw in raw_values:
+        for part in raw.split(","):
+            val = part.strip()
+            if val and val.lstrip("-").isdigit():
+                chat_id = int(val)
+                if chat_id not in ids:
+                    ids.append(chat_id)
+    return ids
+
+
+RECIPIENT_IDS = load_recipient_ids()
 
 router = Router()
 
@@ -98,6 +118,15 @@ def format_admin_lead(data: dict[str, Any], tg_user: Any = None) -> str:
     return "\n".join(line for line in lines if line is not None and line != "")
 
 
+async def broadcast_lead(bot: Bot, text: str) -> None:
+    """Отправляет заявку главному админу и всем подключённым менеджерам."""
+    for chat_id in RECIPIENT_IDS:
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+        except Exception as exc:
+            logger.warning("Failed to send lead to %s: %s", chat_id, exc)
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     keyboard = ReplyKeyboardMarkup(
@@ -129,7 +158,7 @@ async def handle_web_app_data(message: Message, bot: Bot) -> None:
         return
 
     admin_text = format_admin_lead(payload, tg_user=message.from_user)
-    await bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text)
+    await broadcast_lead(bot, admin_text)
 
     await message.answer(
         "✅ <b>Заявка принята!</b>\n"
@@ -153,7 +182,7 @@ def create_http_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
 
     async def health(_: web.Request) -> web.Response:
-        return web.json_response({"status": "ok", "service": "sdv-bot"})
+        return web.json_response({"status": "ok", "recipients": len(RECIPIENT_IDS)})
 
     async def receive_lead(request: web.Request) -> web.Response:
         try:
@@ -162,7 +191,7 @@ def create_http_app(bot: Bot) -> web.Application:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
         admin_text = format_admin_lead(payload)
-        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text)
+        await broadcast_lead(bot, admin_text)
 
         tg_user_id = payload.get("telegramUserId")
         if tg_user_id:
@@ -179,7 +208,6 @@ def create_http_app(bot: Bot) -> web.Application:
 
         return web.json_response({"ok": True})
 
-    # Поддержка GET и HEAD на / и /health для Render и UptimeRobot
     app.router.add_get("/", health)
     app.router.add_head("/", health)
     app.router.add_get("/health", health)
@@ -189,7 +217,6 @@ def create_http_app(bot: Bot) -> web.Application:
 
 
 async def keep_alive_loop() -> None:
-    """Авто-пинг каждые 10 минут, чтобы бесплатный Render не усыплял контейнер."""
     if not SELF_URL:
         logger.info("RENDER_EXTERNAL_URL not set; self-ping disabled.")
         return
@@ -199,7 +226,7 @@ async def keep_alive_loop() -> None:
     logger.info("Keep-alive loop started -> %s", ping_url)
 
     while True:
-        await asyncio.sleep(600)  # 10 минут
+        await asyncio.sleep(600)
         try:
             async with ClientSession(timeout=timeout) as session:
                 async with session.get(ping_url) as resp:
@@ -209,6 +236,7 @@ async def keep_alive_loop() -> None:
 
 
 async def on_startup(bot: Bot) -> None:
+    logger.info("Lead recipients configured: %s", RECIPIENT_IDS)
     try:
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
@@ -222,7 +250,6 @@ async def on_startup(bot: Bot) -> None:
 
 
 async def run_polling_forever(dp: Dispatcher, bot: Bot) -> None:
-    """Защита от падений при редеплое (TelegramConflictError) и обрывах сети."""
     while True:
         try:
             await bot.delete_webhook(drop_pending_updates=True)
@@ -249,7 +276,6 @@ async def main() -> None:
     dp.include_router(router)
     dp.startup.register(on_startup)
 
-    # 1. Запускаем HTTP-сервер первым (чтобы Render сразу увидел открытый порт)
     http_app = create_http_app(bot)
     runner = web.AppRunner(http_app)
     await runner.setup()
@@ -257,10 +283,8 @@ async def main() -> None:
     await site.start()
     logger.info("HTTP server listening on port %s", PORT)
 
-    # 2. Запускаем фоновый авто-пинг
     keep_alive_task = asyncio.create_task(keep_alive_loop())
 
-    # 3. Запускаем устойчивый polling
     try:
         await run_polling_forever(dp, bot)
     finally:
